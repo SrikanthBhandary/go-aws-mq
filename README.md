@@ -93,3 +93,11 @@ func parseEvent(msg amqp.Delivery, c *awsmq.Client, ctx context.Context) {
   
   
 ```
+
+# Loging and Negative acknowledgment
+```
+func logAndNack(msg amqp.Delivery, l *zerolog.Event, t time.Time, err string, args ...interface{}) {
+	msg.Nack(false, false)
+	l.Int64("took-ms", time.Since(t).Milliseconds()).Str("level", "error").Msg(fmt.Sprintf(err, args...))
+}
+```
