@@ -8,6 +8,12 @@ logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 sigs := make(chan os.Signal, 1)
 client := awsmq.New("<pushqueueName","listnerQueueName","<amqpurl>",logger,sigs)
 ```
+# How to Push?
+
+```
+client.Push([]byte("Testing-1"))
+```
+
 
 # How to Stream?
 
