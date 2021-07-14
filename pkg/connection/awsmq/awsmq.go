@@ -99,7 +99,7 @@ func (c *Client) handleReconnect(addr string) {
 func (c *Client) connect(addr string) bool {
 	conn, err := amqp.Dial(addr)
 	if err != nil {
-		c.Logger.Printf("failed to dial AWSMQ server: %v", err)
+		c.Logger.Printf("Failed to dial AWSMQ server: %v", err)
 		return false
 	}
 	ch, err := conn.Channel()
