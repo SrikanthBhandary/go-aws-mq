@@ -219,7 +219,7 @@ func (c *Client) Close() error {
 		return err
 	}
 	c.IsConnected = false
-	fmt.Println("Gracefully stopped rabbitMQ connection")
+	fmt.Println("Gracefully stopped AWSMQ connection")
 	return nil
 }
 
