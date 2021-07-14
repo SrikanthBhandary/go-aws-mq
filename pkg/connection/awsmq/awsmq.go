@@ -205,9 +205,9 @@ func (c *Client) Close() error {
 	c.Wg.Wait()
 	for i := 1; i <= c.Threads; i++ {
 		fmt.Println("Closing consumer: ", i)
-		err := c.Channel.Cancel(consumerName(i), false)
+		err := c.Channel.Cancel(ConsumerName(i), false)
 		if err != nil {
-			return fmt.Errorf("Error canceling consumer %s: %v", consumerName(i), err)
+			return fmt.Errorf("Error canceling consumer %s: %v", ConsumerName(i), err)
 		}
 	}
 	err := c.Channel.Close()
@@ -223,6 +223,6 @@ func (c *Client) Close() error {
 	return nil
 }
 
-func consumerName(i int) string {
+func ConsumerName(i int) string {
 	return fmt.Sprintf("go-consumer-%v", i)
 }
