@@ -101,3 +101,7 @@ func logAndNack(msg amqp.Delivery, l *zerolog.Event, t time.Time, err string, ar
 	l.Int64("took-ms", time.Since(t).Milliseconds()).Str("level", "error").Msg(fmt.Sprintf(err, args...))
 }
 ```
+# References: 
+- https://gist.github.com/harrisonturton/c6b62d45e6117d5d03ff44e4e8e1e7f7
+- https://gist.github.com/ribice/20951bd1c84d714ff2476465c0c0653f
+
