@@ -52,7 +52,7 @@ func Stream(cancelCtx context.Context, c *awsmq.Client) error {
 		if err != nil {
 			return err
 		}
-
+		c.Wg.Add(1)
 		go func() {
 			defer c.Wg.Done()
 			for {
@@ -86,14 +86,7 @@ func parseEvent(msg amqp.Delivery, c *awsmq.Client, ctx context.Context) {
 	fmt.Println(string(msg.Body))
 	msg.Ack(true)
 	//msg.Nack(false, true)
-  defer func(ctx context.Context, e event, m amqp.Delivery, logger *zerolog.Event) {
-		if err := recover(); err != nil {
-			stack := make([]byte, 8096)
-			stack = stack[:runtime.Stack(stack, false)]
-			l.Bytes("stack", stack).Str("level", "fatal").Interface("error", err).Msg("panic recovery for rabbitMQ message")
-			msg.Nack(false, false)
-		}
-	}(ctx, evt, msg, l)  
+  
 	return  
 }  
   
