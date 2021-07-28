@@ -59,7 +59,7 @@ func New(StreamQueue, PushQueue, addr string, l zerolog.Logger, done chan os.Sig
 		Wg:          &sync.WaitGroup{},
 	}
 
-	client.Wg.Add(threads)
+	//client.Wg.Add(threads)
 
 	go client.handleReconnect(addr)
 	return &client
