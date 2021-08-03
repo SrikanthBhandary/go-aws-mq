@@ -41,6 +41,7 @@ type Client struct {
 	DeadLetterQueue    string // DeadLetterQueueName
 	RoutingKey         string // RoutingKey
 	ExchangeType       string // ExchangeType
+	sync.Mutex
 }
 
 // New is a constructor that takes address, push and listen queue names,
@@ -87,7 +88,9 @@ func New(exchng, dlx, exchngType, dlq, routekey string, StreamQueue, PushQueue, 
 // notifyClose, and then continuously attempt to reconnect.
 func (c *Client) handleReconnect(addr string) {
 	for c.alive {
+		c.Lock()
 		c.IsConnected = false
+		c.Unlock()
 		t := time.Now()
 		fmt.Printf("Attempting to connect to AWSMQ: %s\n", addr)
 		var retryCount int
@@ -212,7 +215,9 @@ func (c *Client) connect(addr string) bool {
 	}
 
 	c.changeConnection(conn, ch)
+	c.Lock()
 	c.IsConnected = true
+	c.Unlock()
 	return true
 }
 
@@ -232,9 +237,13 @@ func (c *Client) changeConnection(connection *amqp.Connection, Channel *amqp.Cha
 // it continuously resends messages until a confirmation is received.
 // This will block until the server sends a confirm.
 func (c *Client) Push(data []byte) error {
+	c.Lock()
+	defer c.Unlock()
 	if !c.IsConnected {
+
 		return errors.New("Failed to push: not connected")
 	}
+
 	for {
 		err := c.UnsafePush(data)
 		if err != nil {

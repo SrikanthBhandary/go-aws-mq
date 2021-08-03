@@ -60,12 +60,14 @@ func main() {
 // Stream should be handled in a different way if we are making this as a lib.
 func Stream(cancelCtx context.Context, c *awsmq.Client) error {
 	for {
+		c.Lock()
 		if c.IsConnected {
+			c.Unlock()
 			break
 		}
+		c.Unlock()
 		time.Sleep(1 * time.Second)
 	}
-
 	err := c.Channel.Qos(1, 0, false)
 	if err != nil {
 		return err
