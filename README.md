@@ -1,3 +1,19 @@
+<h1> GO-AWS-MQ </h1>
+<b>GO-AWS-MQ</b> is a name given to the rabbitMQ client. 
+It is a service to connect any RabbitMQ or AWSMQ services. It will try to reconnect the server automatically in case of any client failure.
+
+It is worth noting that routing-based keys will not be applicable for the default exchange.  It is always good to have your private "exchange" and routing-based message enqueuing.
+
+Sometimes, there could be a scenario related to the negative acknowledgment of the messages. It may be required to process it later.  So it is a good idea to keep the dead-letter exchange and the queue.
+
+Following are the examples which demonstrate the sending and processing of events.
+
+
+
+
+
+
+
 <h3> Stream Example </h3>
 
 ```
