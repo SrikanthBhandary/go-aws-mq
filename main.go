@@ -1,6 +1,3 @@
-<h3> Stream Example </h3>
-
-```
 package main
 
 import (
@@ -104,50 +101,3 @@ func parseEvent(msg amqp.Delivery, c *awsmq.Client, ctx context.Context) {
 
 	return
 }
-```
-
-<h3>Push Example: </h3>
-
-```
-package main
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"os"
-	"time"
-
-	"github.com/SrikanthBhandary/go-aws-mq/pkg/connection/awsmq"
-	"github.com/rs/zerolog"
-	"github.com/streadway/amqp"
-)
-
-func main() {
-	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	//(StreamQueue, PushQueue, addr string, l zerolog.Logger, done chan os.Signal
-	sigs := make(chan os.Signal, 1)
-
-	client := awsmq.New(
-		"AWSMQ-Test-Exchange",                //ExchangeName
-		"AWSMQ-Test-Exchange-DeadLetter",     //DeadLetterExchangeName
-		"direct",                             //TypeofExchange
-		"AWSMQ-Test-Queue-DeadLetter",        //DeadLetterQueueName
-		"AWSMQ",                              //Routingkey
-		"AWSMQ-Test-Queue-Input",             //PushQueue
-		"",                                   //StreamQueue
-		"amqp://user:bitnami@localhost:5672", //AMQP URL
-		logger,                               //Logger
-		sigs,                                 //Signal
-	)
-
-	for i := 0; i < 200; i++ {
-		client.Push([]byte(`This is a testing.`))
-		time.Sleep(5 * time.Second)
-	}
-
-}
-```
-# References: 
-- https://gist.github.com/harrisonturton/c6b62d45e6117d5d03ff44e4e8e1e7f7
-- https://gist.github.com/ribice/20951bd1c84d714ff2476465c0c0653f

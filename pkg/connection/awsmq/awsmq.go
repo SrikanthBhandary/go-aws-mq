@@ -24,18 +24,23 @@ const (
 // Client holds necessery information for MQ.
 // It can be used for both RMQ and AWSMQ.
 type Client struct {
-	PushQueue     string // Publisher Queue
-	StreamQueue   string // Listner Queue
-	Logger        zerolog.Logger
-	connection    *amqp.Connection
-	Channel       *amqp.Channel
-	done          chan os.Signal
-	notifyClose   chan *amqp.Error
-	notifyConfirm chan amqp.Confirmation
-	IsConnected   bool
-	alive         bool
-	Threads       int
-	Wg            *sync.WaitGroup
+	PushQueue          string // Publisher Queue
+	StreamQueue        string // Listner Queue
+	Logger             zerolog.Logger
+	connection         *amqp.Connection
+	Channel            *amqp.Channel
+	done               chan os.Signal
+	notifyClose        chan *amqp.Error
+	notifyConfirm      chan amqp.Confirmation
+	IsConnected        bool
+	alive              bool
+	Threads            int
+	Wg                 *sync.WaitGroup
+	Exchange           string // Exchange
+	DeadLetterExchange string // DeadLetterExchange
+	DeadLetterQueue    string // DeadLetterQueueName
+	RoutingKey         string // RoutingKey
+	ExchangeType       string // ExchangeType
 }
 
 // New is a constructor that takes address, push and listen queue names,
@@ -43,20 +48,33 @@ type Client struct {
 // We calculate the number of threads, create the client, and start the
 // connection process. Connect method connects to the rabbitmq server and
 // creates push/listen Channels if they doesn't exist.
-func New(StreamQueue, PushQueue, addr string, l zerolog.Logger, done chan os.Signal) *Client {
+func New(exchng, dlx, exchngType, dlq, routekey string, StreamQueue, PushQueue, addr string, l zerolog.Logger, done chan os.Signal) *Client {
 	threads := runtime.GOMAXPROCS(0)
 	if numCPU := runtime.NumCPU(); numCPU > threads {
 		threads = numCPU
 	}
 
+	if exchng == "" {
+		if PushQueue == "" {
+			routekey = PushQueue
+		} else {
+			routekey = StreamQueue
+		}
+	}
+
 	client := Client{
-		Logger:      l,
-		Threads:     threads,
-		PushQueue:   PushQueue,
-		StreamQueue: StreamQueue,
-		done:        done,
-		alive:       true,
-		Wg:          &sync.WaitGroup{},
+		Logger:             l,
+		Threads:            threads,
+		PushQueue:          PushQueue,
+		StreamQueue:        StreamQueue,
+		done:               done,
+		alive:              true,
+		Wg:                 &sync.WaitGroup{},
+		Exchange:           exchng,
+		DeadLetterExchange: dlx,
+		DeadLetterQueue:    dlq,
+		RoutingKey:         routekey,
+		ExchangeType:       exchngType,
 	}
 
 	//client.Wg.Add(threads)
@@ -94,6 +112,79 @@ func (c *Client) handleReconnect(addr string) {
 	}
 }
 
+func (c *Client) BindQueues(ch *amqp.Channel) bool {
+	//Binding the queue to exchange using the routing key.
+	if err := ch.QueueBind(c.DeadLetterQueue, c.RoutingKey, c.DeadLetterExchange, false, nil); err != nil {
+		c.Logger.Printf("cannot bind %v to %v: got: %v", c.DeadLetterQueue, c.DeadLetterExchange, err)
+		return false
+	}
+	if err := ch.QueueBind(c.StreamQueue, c.RoutingKey, c.Exchange, false, nil); err != nil {
+		c.Logger.Printf("cannot bind %v: got: %v", c.Exchange, err)
+		return false
+	}
+	if err := ch.QueueBind(c.PushQueue, c.RoutingKey, c.Exchange, false, nil); err != nil {
+		c.Logger.Printf("cannot bind %v: got: %v", c.Exchange, err)
+		return false
+	}
+	return true
+}
+
+func (c *Client) DeclareQueues(ch *amqp.Channel) bool {
+	if c.DeadLetterQueue != "" && c.DeadLetterExchange != "" {
+		//Declaring all the deadletter queue
+		options := amqp.Table{
+			"x-dead-letter-exchange": c.DeadLetterExchange,
+		}
+		if _, err := ch.QueueDeclare(c.DeadLetterQueue, true, false, false, false, nil); err != nil {
+			c.Logger.Printf("cannot declare %v: got: %v", c.DeadLetterQueue, err)
+			return false
+		}
+		if _, err := ch.QueueDeclare(c.StreamQueue, true, false, false, false, options); err != nil {
+			c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.StreamQueue, c.DeadLetterExchange, err)
+			return false
+		}
+		if _, err := ch.QueueDeclare(c.PushQueue, true, false, false, false, options); err != nil {
+			c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.PushQueue, c.DeadLetterExchange, err)
+			return false
+		}
+		return c.BindQueues(ch)
+	} else {
+		_, err := ch.QueueDeclare(c.StreamQueue, true, false, false, false, nil)
+		if err != nil {
+			c.Logger.Printf("Failed to declare stream queue: %v", err)
+			return false
+		}
+		_, err = ch.QueueDeclare(c.PushQueue, true, false, false, false, nil)
+		if err != nil {
+			c.Logger.Printf("Failed to declare push queue: %v", err)
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Client) DeclareExchanges(ch *amqp.Channel) bool {
+	//DeclareExchanges method declares the exchanges if it is required.
+	//It also create the deadletter exchange and this is optional.
+	if c.Exchange != "" {
+		if err := ch.ExchangeDeclare(c.Exchange, c.ExchangeType,
+			false, true, false, false, nil); err != nil {
+			c.Logger.Printf("cannot declare %v: got: %v", c.Exchange, err)
+			return false
+		}
+	}
+
+	//Declaring the deadletter exchange.
+	if c.DeadLetterExchange != "" {
+		if err := ch.ExchangeDeclare(c.DeadLetterExchange, c.ExchangeType,
+			false, true, false, false, nil); err != nil {
+			c.Logger.Printf("cannot declare %v: got: %v", c.DeadLetterExchange, err)
+			return false
+		}
+	}
+	return true
+}
+
 // connect will make a single attempt to connect to
 // RabbitMq. It returns the success of the attempt.
 func (c *Client) connect(addr string) bool {
@@ -108,31 +199,18 @@ func (c *Client) connect(addr string) bool {
 		return false
 	}
 	ch.Confirm(false)
-	_, err = ch.QueueDeclare(
-		c.StreamQueue,
-		true,  // Durable
-		false, // Delete when unused
-		false, // Exclusive
-		false, // No-wait
-		nil,   // Arguments
-	)
-	if err != nil {
-		c.Logger.Printf("Failed to declare stream queue: %v", err)
+	ok := c.DeclareExchanges(ch)
+	if !ok {
+		c.Logger.Printf("Error occured, when declaring the exchange.")
 		return false
 	}
 
-	_, err = ch.QueueDeclare(
-		c.PushQueue,
-		true,  // Durable
-		false, // Delete when unused
-		false, // Exclusive
-		false, // No-wait
-		nil,   // Arguments
-	)
-	if err != nil {
-		c.Logger.Printf("Failed to declare push queue: %v", err)
+	ok = c.DeclareQueues(ch)
+	if !ok {
+		c.Logger.Printf("Error occured, when declaring the queues.")
 		return false
 	}
+
 	c.changeConnection(conn, ch)
 	c.IsConnected = true
 	return true
@@ -184,11 +262,12 @@ func (c *Client) UnsafePush(data []byte) error {
 	if !c.IsConnected {
 		return ErrDIsConnected
 	}
+
 	return c.Channel.Publish(
-		"",          // Exchange
-		c.PushQueue, // Routing key
-		false,       // Mandatory
-		false,       // Immediate
+		c.Exchange,   // Exchange
+		c.RoutingKey, // Routing key
+		false,        // Mandatory
+		false,        // Immediate
 		amqp.Publishing{
 			ContentType: "text/plain",
 			Body:        data,
@@ -201,7 +280,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 	c.alive = false
-	fmt.Println("Waiting for current messages to be processed...")
+	c.Logger.Printf("Waiting for current messages to be processed...")
 	c.Wg.Wait()
 	for i := 1; i <= c.Threads; i++ {
 		fmt.Println("Closing consumer: ", i)
@@ -219,7 +298,7 @@ func (c *Client) Close() error {
 		return err
 	}
 	c.IsConnected = false
-	fmt.Println("Gracefully stopped AWSMQ connection")
+	c.Logger.Printf("Gracefully stopped AWSMQ connection")
 	return nil
 }
 
