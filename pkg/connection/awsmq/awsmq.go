@@ -142,14 +142,21 @@ func (c *Client) DeclareQueues(ch *amqp.Channel) bool {
 			c.Logger.Printf("cannot declare %v: got: %v", c.DeadLetterQueue, err)
 			return false
 		}
-		if _, err := ch.QueueDeclare(c.StreamQueue, true, false, false, false, options); err != nil {
-			c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.StreamQueue, c.DeadLetterExchange, err)
-			return false
+
+		if c.StreamQueue != "" {
+			if _, err := ch.QueueDeclare(c.StreamQueue, true, false, false, false, options); err != nil {
+				c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.StreamQueue, c.DeadLetterExchange, err)
+				return false
+			}
 		}
-		if _, err := ch.QueueDeclare(c.PushQueue, true, false, false, false, options); err != nil {
-			c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.PushQueue, c.DeadLetterExchange, err)
-			return false
+
+		if c.PushQueue != "" {
+			if _, err := ch.QueueDeclare(c.PushQueue, true, false, false, false, options); err != nil {
+				c.Logger.Printf("cannot declare %v with dlq %v: got: %v", c.PushQueue, c.DeadLetterExchange, err)
+				return false
+			}
 		}
+
 		return c.BindQueues(ch)
 	} else {
 		_, err := ch.QueueDeclare(c.StreamQueue, true, false, false, false, nil)
